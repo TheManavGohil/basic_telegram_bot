@@ -1,49 +1,71 @@
-// app/api/telegram/route.js
+import Groq from "groq-sdk";
 
-import { OpenAI } from "openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
 });
 
-export async function GET() {
-  return Response.json({ status: "Telegram bot is running 🚀" });
-}
-
 export async function POST(req) {
-  const body = await req.json();
+  try {
+    const body = await req.json();
 
-  const message = body.message?.text;
-  const chatId = body.message?.chat?.id;
+    console.log("BODY:", JSON.stringify(body, null, 2));
 
-  if (!message) {
+    const message =
+      body.message?.text || body.edited_message?.text;
+    const chatId =
+      body.message?.chat?.id || body.edited_message?.chat?.id;
+
+    if (!message || !chatId) {
+      return Response.json({ ok: true });
+    }
+
+    let reply = "";
+
+    try {
+      console.log("Calling Groq...");
+
+      const completion = await groq.chat.completions.create({
+        model: "llama3-8b-8192",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful AI Telegram bot.",
+          },
+          { role: "user", content: message },
+        ],
+      });
+
+      reply =
+        completion.choices[0]?.message?.content ||
+        "No response from AI";
+    } catch (err) {
+      console.error("Groq failed:", err.message);
+
+      reply = `⚠️ AI is currently unavailable.\n\nYou said: ${message}`;
+    }
+
+    // Send reply to Telegram
+    const telegramRes = await fetch(
+      `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: reply,
+        }),
+      }
+    );
+
+    const telegramData = await telegramRes.json();
+    console.log("TELEGRAM RESPONSE:", telegramData);
+
+    return Response.json({ ok: true });
+  } catch (error) {
+    console.error("GLOBAL ERROR:", error.message);
+
     return Response.json({ ok: true });
   }
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: "You are a helpful AI Telegram bot." },
-      { role: "user", content: message },
-    ],
-  });
-
-  const reply =
-    completion.choices[0].message.content || "No response";
-
-  await fetch(
-    `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: reply,
-      }),
-    }
-  );
-
-  return Response.json({ ok: true });
 }
