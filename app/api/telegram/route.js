@@ -1,8 +1,14 @@
+// app/api/telegram/route.js
+
 import { OpenAI } from "openai";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+export async function GET() {
+  return Response.json({ status: "Telegram bot is running 🚀" });
+}
 
 export async function POST(req) {
   const body = await req.json();
@@ -14,7 +20,6 @@ export async function POST(req) {
     return Response.json({ ok: true });
   }
 
-  // AI response (Chat SDK style)
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
@@ -26,7 +31,6 @@ export async function POST(req) {
   const reply =
     completion.choices[0].message.content || "No response";
 
-  // Send reply back to Telegram
   await fetch(
     `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
     {
